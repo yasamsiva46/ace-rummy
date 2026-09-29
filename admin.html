@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="te">
+<head>
+    <meta charset="UTF-8">
+    <title>Ace Rummy - అడ్మిన్ ప్యానెల్</title>
+    <style>
+        body { font-family: sans-serif; background: #121212; color: #fff; padding: 20px; }
+        .box { max-width: 700px; margin: auto; background: #1e1e1e; padding: 20px; border-radius: 8px; border: 1px solid #ff9800; }
+        input, button { padding: 10px; margin: 5px 0; border-radius: 5px; }
+        input { width: 95%; background: #333; color: white; border: 1px solid #555; }
+        button { background: #ff9800; color: black; font-weight: bold; cursor: pointer; border: none; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { border: 1px solid #444; padding: 8px; text-align: left; }
+        th { background: #333; color: #ff9800; }
+        .btn-add { background: #4caf50; color: white; margin-right: 5px; }
+        .btn-cut { background: #f44336; color: white; }
+    </style>
+</head>
+<body>
+    <div class="box">
+        <h2>Ace Rummy - అడ్మిన్ కంట్రోల్స్</h2>
+        <div id="authSection">
+            <input type="password" id="adminKey" placeholder="అడ్మిన్ పాస్‌వర్డ్ ఎంటర్ చేయండి">
+            <button onclick="loadUsers()">లాగిన్ అవ్వండి</button>
+        </div>
+        <div id="panelSection" style="display:none;">
+            <h3>ప్లేయర్ల వివరాలు & కాయిన్స్</h3>
+            <button onclick="loadUsers()">రిఫ్రెష్ లిస్ట్ 🔄</button>
+            <table>
+                <thead>
+                    <tr><th>పేరు</th><th>మొబైల్</th><th>కాయిన్స్</th><th>మార్పు చేయండి</th></tr>
+                </thead>
+                <tbody id="userTable"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        let currentKey = '';
+        async function loadUsers() {
+            const key = document.getElementById('adminKey').value;
+            currentKey = key;
+            const res = await fetch('/api/admin/users', { headers: { 'x-admin-key': key } });
+            if (!res.ok) return alert('పాస్‌వర్డ్ తప్పు!');
+            
+            document.getElementById('authSection').style.display = 'none';
+            document.getElementById('panelSection').style.display = 'block';
+            
+            const users = await res.json();
+            const tbody = document.getElementById('userTable');
+            tbody.innerHTML = '';
+            for (let phone in users) {
+                const u = users[phone];
+                tbody.innerHTML += `
+                    <tr>
+                        <td>${u.name}</td>
+                        <td>${u.phone}</td>
+                        <td style="color:#ffc107; font-weight:bold;">${u.coins}</td>
+                        <td>
+                            <button class="btn-add" onclick="modifyCoins('${u.phone}', 100)">+100</button>
+                            <button class="btn-add" onclick="modifyCoins('${u.phone}', 500)">+500</button>
+                            <button class="btn-cut" onclick="modifyCoins('${u.phone}', -100)">-100</button>
+                        </td>
+                    </tr>
+                `;
+            }
+        }
+
+        async function modifyCoins(phone, amount) {
+            const res = await fetch('/api/admin/update-coins', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'x-admin-key': currentKey },
+                body: JSON.stringify({ phone, amount })
+            });
+            if (res.ok) {
+                loadUsers();
+            } else {
+                alert('మార్పు చేయడం విఫలమైంది');
+            }
+        }
+    </script>
+</body>
+</html>

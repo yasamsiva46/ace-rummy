@@ -252,7 +252,79 @@ io.on('connection', (socket) => {
     });
   });
 });
+// --- యూజర్ల లాగిన్ & అడ్మిన్ కాయిన్స్ కోడ్ ప్రారంభం ---
+const fs = require('fs');
+const USERS_FILE = './users.json';
 
+if (!fs.existsSync(USERS_FILE)) {
+    fs.writeFileSync(USERS_FILE, JSON.stringify({}));
+}
+
+function getUsers() {
+    try {
+        return JSON.parse(fs.readFileSync(USERS_FILE, 'utf8') || '{}');
+    } catch(e) {
+        return {};
+    }
+}
+
+function saveUsers(users) {
+    fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2));
+}
+
+app.use(express.json());
+
+// అడ్మిన్ పేజీ ఓపెన్ అవ్వడానికి
+app.get('/admin', (req, res) => {
+    res.sendFile(__dirname + '/admin.html');
+});
+
+// లాగిన్ / సైన్ అప్
+app.post('/api/auth', (req, res) => {
+    const { name, phone, password } = req.body;
+    if (!phone || !password) return res.status(400).json({ error: 'ఫోన్ నంబర్ మరియు పాస్‌వర్డ్ తప్పనిసరి' });
+
+    let users = getUsers();
+    if (!users[phone]) {
+        // కొత్త వారికి 100 బోనస్ కాయిన్స్
+        users[phone] = { name: name || 'Player', phone, password, coins: 100 };
+        saveUsers(users);
+        return res.json({ success: true, message: 'అకౌంట్ క్రియేట్ అయింది!', user: users[phone] });
+    } else {
+        if (users[phone].password === password) {
+            return res.json({ success: true, message: 'లాగిన్ విజయవంతమైంది!', user: users[phone] });
+        } else {
+            return res.status(401).json({ error: 'తప్పుడు పాస్‌వర్డ్!' });
+        }
+    }
+});
+
+// అడ్మిన్ పాస్‌వర్డ్
+const ADMIN_SECRET = 'admin@123';
+
+// ప్లేయర్ల లిస్ట్ చూడటం
+app.get('/api/admin/users', (req, res) => {
+    const key = req.headers['x-admin-key'];
+    if (key !== ADMIN_SECRET) return res.status(403).json({ error: 'అనుమతి లేదు' });
+    res.json(getUsers());
+});
+
+// కాయిన్స్ యాడ్ / తీసివేత
+app.post('/api/admin/update-coins', (req, res) => {
+    const key = req.headers['x-admin-key'];
+    if (key !== ADMIN_SECRET) return res.status(403).json({ error: 'అనుమతి లేదు' });
+
+    const { phone, amount } = req.body;
+    let users = getUsers();
+
+    if (!users[phone]) return res.status(404).json({ error: 'ప్లేయర్ దొరకలేదు' });
+
+    users[phone].coins = Math.max(0, (users[phone].coins || 0) + Number(amount));
+    saveUsers(users);
+
+    res.json({ success: true, newBalance: users[phone].coins });
+});
+// --- యూజర్ల లాగిన్ & అడ్మిన్ కాయిన్స్ కోడ్ ముగింపు ---
 const PORT = 3000;
 server.listen(PORT, '0.0.0.0', () => {
   const ip = getLocalIP();
