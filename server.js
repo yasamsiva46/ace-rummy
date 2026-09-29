@@ -300,7 +300,7 @@ app.post('/api/auth', (req, res) => {
 });
 
 // అడ్మిన్ పాస్‌వర్డ్
-const ADMIN_SECRET = 'admin@123';
+const ADMIN_SECRET = 'pavani9289';
 
 // ప్లేయర్ల లిస్ట్ చూడటం
 app.get('/api/admin/users', (req, res) => {
