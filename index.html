@@ -1,0 +1,703 @@
+<!DOCTYPE html>
+<html lang="te">
+<head>
+  <meta charset="UTF-8">
+  <title>VNS రమ్మీ</title>
+  <script src="/socket.io/socket.io.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Arial, sans-serif; }
+    body { background: #070d12; min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; color: white; padding: 10px; overflow: hidden; }
+
+    #loginBox { background: rgba(0,0,0,0.85); border: 2px solid #d4af37; padding: 25px 35px; border-radius: 14px; text-align: center; box-shadow: 0 0 25px rgba(212,175,55,0.4); width: 380px; }
+    #loginBox input { padding: 12px; font-size: 15px; border-radius: 6px; border: 1px solid #d4af37; outline: none; margin-bottom: 12px; width: 100%; text-align: center; }
+    
+    .btn-main { background: linear-gradient(180deg, #ffd700, #b8860b); color: #000; border: none; padding: 12px 24px; font-size: 15px; font-weight: bold; border-radius: 6px; cursor: pointer; width: 100%; margin-bottom: 8px; }
+    .btn-copy-link { background: #2c3e50; color: #ffd700; border: 1px dashed #d4af37; padding: 8px 14px; font-size: 13px; font-weight: bold; border-radius: 6px; cursor: pointer; width: 100%; }
+
+    #connStatus { font-size: 12px; margin-bottom: 10px; font-weight: bold; }
+    .connected { color: #2ecc71; }
+    .disconnected { color: #e74c3c; }
+
+    #lobbyArea { margin-top: 15px; border-top: 1px solid rgba(255,255,255,0.2); padding-top: 12px; text-align: left; }
+    .lobby-badge { background: rgba(255,255,255,0.1); padding: 7px 12px; border-radius: 5px; margin-bottom: 6px; font-size: 13px; display: flex; justify-content: space-between; align-items: center; border-left: 3px solid #ffd700; }
+    #btnStartMatch { display: none; background: #27ae60; color: white; border: none; padding: 12px; font-weight: bold; font-size: 15px; border-radius: 6px; width: 100%; cursor: pointer; margin-top: 10px; box-shadow: 0 0 15px #2ecc71; }
+
+    .rummy-table {
+      width: 98vw;
+      max-width: 1180px;
+      height: 640px;
+      background: radial-gradient(ellipse at center, #00505b 0%, #002c33 70%, #00171b 100%);
+      border: 12px solid #1a252c;
+      outline: 2px dashed #008fa0;
+      box-shadow: inset 0 0 60px rgba(0,0,0,0.9), 0 0 35px rgba(0,0,0,0.95);
+      border-radius: 220px;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      align-items: center;
+      padding: 15px 30px;
+    }
+
+    .opponents-row { display: flex; justify-content: space-around; width: 100%; max-width: 950px; }
+    .opp-seat { display: flex; align-items: center; gap: 8px; background: rgba(0,0,0,0.6); padding: 4px 12px; border-radius: 20px; border: 1px solid #00a8b5; font-size: 12px; }
+    .opp-avatar { width: 30px; height: 30px; border-radius: 50%; background: #ffd700; color: black; display: flex; align-items: center; justify-content: center; font-weight: bold; }
+
+    .table-center { display: flex; align-items: center; justify-content: center; gap: 30px; width: 100%; margin-top: 10px; }
+    
+    .show-slot { 
+      border: 2px dashed #f1c40f; 
+      border-radius: 8px; 
+      width: 70px; 
+      height: 98px; 
+      display: flex; 
+      align-items: center; 
+      justify-content: center; 
+      text-align: center; 
+      font-size: 12px; 
+      font-weight: bold; 
+      color: #ffd700; 
+      background: rgba(241, 196, 15, 0.15); 
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .show-slot:hover {
+      background: rgba(241, 196, 15, 0.35);
+      box-shadow: 0 0 15px #ffd700;
+      transform: scale(1.05);
+    }
+    .show-declared {
+      animation: victoryPulse 1.2s infinite alternate;
+    }
+    @keyframes victoryPulse {
+      0% { box-shadow: 0 0 10px #f1c40f; transform: scale(1); }
+      100% { box-shadow: 0 0 35px #ffd700, 0 0 10px #fff; transform: scale(1.08); }
+    }
+    
+    .deck-container { position: relative; width: 85px; height: 98px; cursor: pointer; transition: transform 0.1s; }
+    .deck-container:active { transform: scale(0.96); }
+    .joker-cut-card { position: absolute; left: -20px; top: 5px; width: 60px; height: 88px; background: white; border-radius: 6px; border: 1px solid #ccc; transform: rotate(-15deg); z-index: 1; display: flex; flex-direction: column; justify-content: space-between; padding: 4px; font-size: 12px; font-weight: bold; }
+    .joker-indicator { position: absolute; bottom: 2px; right: 4px; background: #f39c12; color: black; font-size: 9px; padding: 1px 4px; border-radius: 3px; font-weight: bold; }
+    
+    .closed-main-card {
+      position: absolute; left: 10px; top: 0; width: 65px; height: 98px;
+      background: radial-gradient(circle, #8a1515 0%, #4a0000 100%);
+      border: 2px solid #ffd700; border-radius: 6px;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 900; color: #ffd700; font-size: 18px; letter-spacing: 2px;
+      z-index: 2; box-shadow: 3px 3px 10px rgba(0,0,0,0.7);
+    }
+
+    .open-deck-container { display: flex; flex-direction: column; align-items: center; gap: 5px; }
+    .open-deck-slot { width: 65px; height: 98px; position: relative; cursor: pointer; }
+    .btn-history { background: #2c3e50; color: #ffd700; border: 1px solid #d4af37; padding: 4px 10px; border-radius: 5px; font-size: 11px; font-weight: bold; cursor: pointer; }
+
+    .card { 
+      width: 56px; 
+      height: 86px; 
+      background: white; 
+      border-radius: 6px; 
+      border: 1px solid #bbb; 
+      box-shadow: -2px 3px 6px rgba(0,0,0,0.4); 
+      display: flex; 
+      flex-direction: column; 
+      justify-content: space-between; 
+      padding: 4px 5px; 
+      font-weight: bold; 
+      user-select: none; 
+      cursor: pointer; 
+      position: relative; 
+      transition: transform 0.15s ease, box-shadow 0.15s ease; 
+    }
+    .card:hover { transform: translateY(-6px); }
+    .card.selected { transform: translateY(-18px) !important; border: 2px solid #f39c12; box-shadow: 0 0 15px #f39c12; }
+    .card.is-joker { border: 2px solid #ffd700 !important; box-shadow: 0 0 10px rgba(255, 215, 0, 0.7); }
+    .joker-tag-mini { position: absolute; bottom: 2px; left: 50%; transform: translateX(-50%); background: #f39c12; color: #111; font-size: 8px; font-weight: 900; padding: 1px 3px; border-radius: 3px; }
+
+    .red { color: #d63031; }
+    .black { color: #111; }
+    .card-val-top { font-size: 13px; line-height: 1; }
+    .card-val-center { font-size: 22px; text-align: center; }
+    .card-val-bottom { font-size: 11px; line-height: 1; text-align: right; transform: rotate(180deg); }
+
+    .player-area { width: 100%; display: flex; flex-direction: column; align-items: center; }
+    .action-bar { display: flex; align-items: center; justify-content: space-between; width: 100%; max-width: 950px; margin-bottom: 6px; padding: 0 10px; }
+    
+    .timer-badge { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: bold; }
+    .timer-circle { width: 36px; height: 36px; border-radius: 50%; background: #27ae60; border: 2px solid #2ecc71; display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 900; }
+    .timer-extra { background: #d35400 !important; border-color: #e67e22 !important; box-shadow: 0 0 12px #e67e22; animation: blink 1s infinite; }
+    @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
+
+    .btn-action { padding: 6px 14px; border-radius: 6px; font-size: 13px; font-weight: bold; cursor: pointer; border: none; transition: transform 0.1s; }
+    .btn-action:active { transform: scale(0.95); }
+    .btn-autogroup { background: linear-gradient(180deg, #9b59b6, #8e44ad); color: white; border: 1px solid #d2b4de; }
+    .btn-group-action { background: #2980b9; color: white; border: 1px solid #5dade2; }
+    .btn-normal { background: linear-gradient(180deg, #34495e, #2c3e50); color: white; border: 1px solid #7f8c8d; }
+    .btn-view-active { outline: 2px solid #ffd700; box-shadow: 0 0 10px #ffd700; }
+    .btn-discard { background: #d32f2f; color: white; }
+
+    .groups-wrapper { display: flex; justify-content: center; gap: 8px; width: 100%; min-height: 110px; align-items: flex-end; flex-wrap: wrap; }
+    .card-group-box { background: rgba(0, 0, 0, 0.5); border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 8px; padding: 5px 6px; display: flex; flex-direction: column; align-items: center; transition: all 0.2s ease; }
+    .badge-status { font-size: 10px; font-weight: bold; margin-bottom: 4px; }
+    .status-pure { color: #2ecc71; }
+    .status-impure { color: #f1c40f; }
+    .status-set { color: #3498db; }
+    .status-suit { color: #aaa; }
+    .status-custom { color: #e67e22; }
+
+    .group-cards-row { display: flex; align-items: center; }
+    .group-cards-row .card { margin-left: -22px; }
+    .group-cards-row .card:first-child { margin-left: 0; }
+
+    .single-hand-row { display: flex; align-items: center; justify-content: center; width: 100%; min-height: 110px; }
+    .single-hand-row .card { margin-left: -22px; }
+    .single-hand-row .card:first-child { margin-left: 0; }
+
+    #historyModal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 1000; justify-content: center; align-items: center; }
+    #historyModalContent { background: #002c33; border: 2px solid #ffd700; border-radius: 12px; padding: 20px; width: 90%; max-width: 420px; text-align: center; }
+    .history-list { max-height: 250px; overflow-y: auto; margin: 15px 0; text-align: left; }
+    .history-item { background: rgba(0,0,0,0.3); padding: 8px 12px; border-bottom: 1px solid #333; display: flex; justify-content: space-between; font-size: 14px; }
+  </style>
+</head>
+<body>
+
+  <div id="loginBox">
+    <h1 style="color: #ffd700; margin-bottom: 4px; font-size: 26px; letter-spacing: 2px;">VNS రమ్మీ</h1>
+    <div id="connStatus" class="disconnected">🔴 సర్వర్‌తో కనెక్ట్ అవుతోంది...</div>
+    
+    <div id="joinControls">
+      <input type="text" id="playerNameInput" placeholder="మీ పేరు టైప్ చేయండి">
+      <button id="btnJoinGame" class="btn-main" onclick="startJoin()">టేబుల్‌పై చేరండి</button>
+      <button class="btn-copy-link" onclick="copyInviteLink()">🔗 రూమ్ లింక్ కాపీ చేయండి</button>
+    </div>
+
+    <div id="lobbyArea">
+      <div style="font-weight: bold; margin-bottom: 8px; color: #ffd700;">చేరిన ఆటగాళ్లు (<span id="playerCount">0</span>/6):</div>
+      <div id="lobbyPlayersList">
+        <p style="color:#aaa; font-size:12px; text-align:center;">ఇంకా ఎవరూ చేరలేదు...</p>
+      </div>
+      <button id="btnStartMatch" onclick="hostStartGame()">🎮 గేమ్ ప్రారంభించండి</button>
+    </div>
+  </div>
+
+  <div id="gameTable" class="rummy-table" style="display: none;">
+    <div id="opponentsBar" class="opponents-row"></div>
+
+    <div class="table-center">
+      <div id="showTargetSlot" class="show-slot" onclick="submitShow()">Place<br>Show<br>Here</div>
+
+      <div class="deck-container" onclick="drawCard('closed')">
+        <div id="jokerCardDisplay" class="joker-cut-card"></div>
+        <div class="closed-main-card">VNS</div>
+      </div>
+
+      <div class="open-deck-container">
+        <div class="open-deck-slot" onclick="drawCard('open')">
+          <div id="openDeckCard" class="card" style="margin-left: 0;"></div>
+        </div>
+        <button class="btn-history" onclick="openHistoryModal()">📜 కార్డ్స్ హిస్టరీ</button>
+      </div>
+    </div>
+
+    <div class="player-area">
+      <div class="action-bar">
+        <div class="timer-badge">
+          <div id="timerDisplay" class="timer-circle">30</div>
+          <span id="timerLabel" style="color: #2ecc71;">సమయం</span>
+        </div>
+
+        <div style="display: flex; gap: 8px;">
+          <button id="btnAutoView" class="btn-action btn-autogroup btn-view-active" onclick="switchView('auto')">⚡ ఆటో గ్రూప్</button>
+          <button class="btn-action btn-group-action" onclick="groupSelectedCards()">➕ GROUP</button>
+          <button id="btnNormalView" class="btn-action btn-normal" onclick="switchView('normal')">🃏 నార్మల్ వ్యూ</button>
+          <button class="btn-action btn-discard" onclick="discardCard()">DISCARD</button>
+        </div>
+
+        <div id="turnBadge" style="font-size: 13px; font-weight: bold;">-</div>
+      </div>
+
+      <p id="instructionText" style="font-size: 13px; color: #ffeb3b; margin-bottom: 6px;"></p>
+      <div id="cardsDisplayArea" class="groups-wrapper"></div>
+    </div>
+  </div>
+
+  <div id="historyModal">
+    <div id="historyModalContent">
+      <h3 style="color: #ffd700; margin-bottom: 10px;">📜 విసిరిన కార్డుల హిస్టరీ</h3>
+      <div id="historyList" class="history-list"></div>
+      <button class="btn-action btn-normal" onclick="closeHistoryModal()">మూసివేయి</button>
+    </div>
+  </div>
+
+  <script>
+    const socket = io();
+
+    // 🔊 Web Audio API - A23 రమ్మీ తరహా రియల్ కార్డ్ సౌండ్ ఇంజిన్
+    let audioCtx = null;
+    function getAudioContext() {
+      if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+      return audioCtx;
+    }
+
+    function playSound(type) {
+      try {
+        const ctx = getAudioContext();
+        if (type === 'draw') {
+          // 🃏 కార్డ్ తీసినప్పుడు స్మూత్ స్వూష్ (Card Swoosh)
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(450, ctx.currentTime);
+          osc.frequency.exponentialRampToValueAtTime(140, ctx.currentTime + 0.12);
+          gain.gain.setValueAtTime(0.25, ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.12);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start();
+          osc.stop(ctx.currentTime + 0.12);
+
+        } else if (type === 'discard') {
+          // 🎴 కార్డు పడేసినప్పుడు గట్టి స్నాప్ (Card Snap)
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(200, ctx.currentTime);
+          osc.frequency.exponentialRampToValueAtTime(60, ctx.currentTime + 0.09);
+          gain.gain.setValueAtTime(0.45, ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.09);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start();
+          osc.stop(ctx.currentTime + 0.09);
+
+        } else if (type === 'click') {
+          // 👆 కార్డు టచ్ / సెలెక్ట్ చేసినప్పుడు చిన్న ట్యాప్
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(800, ctx.currentTime);
+          gain.gain.setValueAtTime(0.1, ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.04);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start();
+          osc.stop(ctx.currentTime + 0.04);
+
+        } else if (type === 'show') {
+          // 🏆 షో కొట్టినప్పుడు A23 విక్టరీ ట్యూన్ (Grand Fanfare Chime)
+          const notes = [523.25, 659.25, 783.99, 1046.50];
+          notes.forEach((freq, idx) => {
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = 'triangle';
+            osc.frequency.value = freq;
+            const start = ctx.currentTime + (idx * 0.12);
+            gain.gain.setValueAtTime(0, start);
+            gain.gain.linearRampToValueAtTime(0.35, start + 0.03);
+            gain.gain.exponentialRampToValueAtTime(0.001, start + 0.45);
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start(start);
+            osc.stop(start + 0.45);
+          });
+        }
+      } catch (err) {
+        console.warn('Audio play prevented:', err);
+      }
+    }
+
+    let isMyTurn = false;
+    let hasDrawn = false;
+    let rawCardsList = [];
+    let currentCustomGroups = [];
+    let selectedIds = new Set();
+    let currentWildJoker = null;
+    let currentMode = 'auto';
+    let discardLogs = [];
+
+    const cardRank = { 'A': 1, '2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9, '10': 10, 'J': 11, 'Q': 12, 'K': 13 };
+
+    socket.on('connect', () => {
+      const st = document.getElementById('connStatus');
+      st.className = 'connected';
+      st.innerText = '🟢 సర్వర్ కనెక్ట్ అయింది! పేరు ఇచ్చి చేరండి.';
+    });
+
+    socket.on('disconnect', () => {
+      const st = document.getElementById('connStatus');
+      st.className = 'disconnected';
+      st.innerText = '🔴 సర్వర్ డిస్‌కనెక్ట్ అయింది';
+    });
+
+    function copyInviteLink() {
+      const link = window.location.href;
+      navigator.clipboard.writeText(link).then(() => {
+        alert('లింక్ కాపీ అయింది:\n' + link);
+      }).catch(() => {
+        prompt('ఈ లింక్‌ను కాపీ చేసుకోండి:', link);
+      });
+    }
+
+    function startJoin() {
+      if (!socket.connected) return alert('సర్వర్ ఇంకా కనెక్ట్ కాలేదు!');
+      const name = document.getElementById('playerNameInput').value.trim();
+      if (!name) return alert('దయచేసి మీ పేరు టైప్ చేయండి!');
+
+      playSound('click');
+      document.getElementById('btnJoinGame').style.display = 'none';
+      document.getElementById('playerNameInput').disabled = true;
+
+      socket.emit('join_game', { playerName: name });
+    }
+
+    socket.on('lobby_update', (data) => {
+      document.getElementById('playerCount').innerText = data.players.length;
+      const listEl = document.getElementById('lobbyPlayersList');
+      listEl.innerHTML = '';
+
+      if (data.players.length === 0) {
+        listEl.innerHTML = '<p style="color:#aaa; font-size:12px; text-align:center;">ఇంకా ఎవరూ చేరలేదు...</p>';
+      } else {
+        data.players.forEach((p, idx) => {
+          const item = document.createElement('div');
+          item.className = 'lobby-badge';
+          item.innerHTML = `<span>👤 <strong>${p.name}</strong> ${p.isHost ? '<span style="color:#ffd700;">(హోస్ట్)</span>' : ''}</span> <span style="color:#aaa;">సీట్ ${idx + 1}</span>`;
+          listEl.appendChild(item);
+        });
+      }
+
+      const isHost = socket.id === data.hostId;
+      const btnStart = document.getElementById('btnStartMatch');
+      btnStart.style.display = (isHost && data.canStart) ? 'block' : 'none';
+    });
+
+    function hostStartGame() {
+      playSound('click');
+      socket.emit('start_game_now');
+    }
+
+    socket.on('game_started', (data) => {
+      playSound('draw');
+      document.getElementById('loginBox').style.display = 'none';
+      document.getElementById('gameTable').style.display = 'flex';
+      currentWildJoker = data.wildJoker;
+
+      const oppBar = document.getElementById('opponentsBar');
+      oppBar.innerHTML = '';
+      data.opponents.forEach(opp => {
+        const div = document.createElement('div');
+        div.className = 'opp-seat';
+        div.innerHTML = `<div class="opp-avatar">👤</div> <div><strong>${opp.name}</strong><br><span style="color:#aaa;">13 కార్డులు</span></div>`;
+        oppBar.appendChild(div);
+      });
+
+      const jokerEl = document.getElementById('jokerCardDisplay');
+      jokerEl.className = `joker-cut-card ${data.wildJoker.color}`;
+      jokerEl.innerHTML = `<div class="card-val-top">${data.wildJoker.value}<br>${data.wildJoker.suit}</div><div class="joker-indicator">JOKER</div>`;
+
+      rawCardsList = [...data.cards];
+      currentCustomGroups = runSmartGrouping(rawCardsList);
+      applyViewMode();
+    });
+
+    socket.on('my_cards_updated', (data) => {
+      rawCardsList = [...data.cards];
+      selectedIds.clear();
+
+      const allCurrentIds = new Set(rawCardsList.map(c => c.id));
+      currentCustomGroups = currentCustomGroups.map(grp => ({
+        ...grp,
+        cards: grp.cards.filter(c => allCurrentIds.has(c.id))
+      })).filter(grp => grp.cards.length > 0);
+
+      const groupedIds = new Set(currentCustomGroups.flatMap(g => g.cards.map(c => c.id)));
+      const unGrouped = rawCardsList.filter(c => !groupedIds.has(c.id));
+      if (unGrouped.length > 0) {
+        currentCustomGroups.push({ title: 'New Cards', badge: 'status-suit', cards: unGrouped });
+      }
+
+      applyViewMode();
+    });
+
+    socket.on('turn_update', (data) => {
+      isMyTurn = data.isMyTurn;
+      hasDrawn = data.hasDrawn;
+      discardLogs = data.discardHistory || [];
+
+      const badge = document.getElementById('turnBadge');
+      const ins = document.getElementById('instructionText');
+
+      if (isMyTurn) {
+        badge.innerText = 'మీ వంతు (YOUR TURN)';
+        badge.style.color = '#2ecc71';
+        ins.innerText = !hasDrawn ? '👉 డెక్ నుండి ఒక కార్డు తీసుకోండి' : '👉 కార్డు సెలెక్ట్ చేసి DISCARD లేదా SHOW చేయండి.';
+      } else {
+        badge.innerText = `${data.turnPlayerName} ఆడుతున్నారు...`;
+        badge.style.color = '#e74c3c';
+        ins.innerText = '';
+      }
+
+      if (data.openCard) renderCardElement(document.getElementById('openDeckCard'), data.openCard);
+    });
+
+    socket.on('timer_update', (data) => {
+      const timer = document.getElementById('timerDisplay');
+      const label = document.getElementById('timerLabel');
+
+      timer.innerText = data.seconds;
+      if (data.isExtra) {
+        timer.classList.add('timer-extra');
+        label.innerText = 'అదనపు సమయం (+15s)';
+        label.style.color = '#e67e22';
+      } else {
+        timer.classList.remove('timer-extra');
+        label.innerText = data.isFirstRound ? 'సమయం (రౌండ్ 1: 30s)' : 'సమయం (30s)';
+        label.style.color = '#2ecc71';
+      }
+    });
+
+    function drawCard(source) {
+      if (!isMyTurn) return alert('ఇది మీ టర్న్ కాదు!');
+      if (hasDrawn) return alert('మీరు ఇప్పటికే కార్డు తీసుకున్నారు!');
+      playSound('draw');
+      socket.emit('draw_card', { source });
+    }
+
+    function toggleSelect(id) {
+      playSound('click');
+      if (selectedIds.has(id)) {
+        selectedIds.delete(id);
+      } else {
+        selectedIds.add(id);
+      }
+      applyViewMode();
+    }
+
+    function groupSelectedCards() {
+      if (selectedIds.size < 2) {
+        return alert('గ్రూప్ చేయడానికి కనీసం 2 కార్డులను ఎంచుకోండి!');
+      }
+
+      playSound('click');
+      const selCards = rawCardsList.filter(c => selectedIds.has(c.id));
+      
+      currentCustomGroups = currentCustomGroups.map(grp => ({
+        ...grp,
+        cards: grp.cards.filter(c => !selectedIds.has(c.id))
+      })).filter(grp => grp.cards.length > 0);
+
+      const evaluated = evaluateSingleGroup(selCards);
+      currentCustomGroups.push(evaluated);
+
+      selectedIds.clear();
+      currentMode = 'auto';
+      applyViewMode();
+    }
+
+    function discardCard() {
+      if (!isMyTurn) return alert('ఇది మీ టర్న్ కాదు!');
+      if (!hasDrawn) return alert('ముందుగా కార్డు తీసుకోండి!');
+      if (selectedIds.size !== 1) return alert('డిస్కార్డ్ చేయడానికి సరిగ్గా 1 కార్డును మాత్రమే ఎంచుకోండి!');
+
+      playSound('discard');
+      const cardId = Array.from(selectedIds)[0];
+      socket.emit('discard_card', { cardId });
+      selectedIds.clear();
+    }
+
+    function submitShow() {
+      if (!isMyTurn) return alert('ఇది మీ టర్న్ కాదు!');
+      if (!hasDrawn) return alert('ముందుగా డెక్ నుండి 14వ కార్డు తీసుకోండి!');
+      if (selectedIds.size !== 1) return alert('షో వేయడానికి 14వ కార్డును ఎంచుకోండి!');
+
+      if (confirm('మీ చేతిలోని కార్డులతో గేమ్ షో డిక్లేర్ చేయాలా?')) {
+        playSound('show');
+        const showSlot = document.getElementById('showTargetSlot');
+        showSlot.classList.add('show-declared');
+        showSlot.innerHTML = '🏆<br>SHOW<br>DONE';
+        socket.emit('declare_show');
+      }
+    }
+
+    function switchView(mode) {
+      playSound('click');
+      currentMode = mode;
+      document.getElementById('btnAutoView').classList.toggle('btn-view-active', mode === 'auto');
+      document.getElementById('btnNormalView').classList.toggle('btn-view-active', mode === 'normal');
+      if (mode === 'auto') {
+        currentCustomGroups = runSmartGrouping(rawCardsList);
+      }
+      applyViewMode();
+    }
+
+    function evaluateSingleGroup(grpCards) {
+      const jVal = currentWildJoker ? currentWildJoker.value : null;
+
+      if (grpCards.length >= 3) {
+        const s = grpCards[0].suit;
+        if (grpCards.every(c => c.suit === s)) {
+          let ranks = grpCards.map(c => cardRank[c.value]).sort((a,b) => a-b);
+          let isP = true;
+          for (let i = 0; i < ranks.length - 1; i++) {
+            if (ranks[i+1] !== ranks[i] + 1) { isP = false; break; }
+          }
+          if (isP) return { title: '✔ Pure Seq', badge: 'status-pure', cards: grpCards };
+        }
+      }
+
+      if (grpCards.length >= 3 && grpCards.length <= 4) {
+        let nonJ = grpCards.filter(c => c.value !== jVal);
+        if (nonJ.length > 0) {
+          let val = nonJ[0].value;
+          let suits = new Set();
+          let isS = true;
+          for (let c of nonJ) {
+            if (c.value !== val || suits.has(c.suit)) { isS = false; break; }
+            suits.add(c.suit);
+          }
+          if (isS) return { title: '✔ Set', badge: 'status-set', cards: grpCards };
+        }
+      }
+
+      return { title: 'Custom Group', badge: 'status-custom', cards: grpCards };
+    }
+
+    function runSmartGrouping(cards) {
+      let pool = [...cards];
+      let finalGroups = [];
+      const jVal = currentWildJoker ? currentWildJoker.value : null;
+      const suits = ['♠', '♥', '♦', '♣'];
+
+      for (let s of suits) {
+        let suitCards = pool.filter(c => c.suit === s).sort((a,b) => cardRank[a.value] - cardRank[b.value]);
+        let i = 0;
+        while (i < suitCards.length) {
+          let run = [suitCards[i]];
+          let j = i + 1;
+          while (j < suitCards.length) {
+            let prev = cardRank[run[run.length - 1].value];
+            let curr = cardRank[suitCards[j].value];
+            if (curr === prev + 1) { run.push(suitCards[j]); j++; }
+            else if (curr === prev) { j++; }
+            else { break; }
+          }
+          if (run.length >= 3) {
+            finalGroups.push({ title: '✔ Pure Seq', badge: 'status-pure', cards: run });
+            let ids = new Set(run.map(c => c.id));
+            pool = pool.filter(c => !ids.has(c.id));
+            suitCards = suitCards.filter(c => !ids.has(c.id));
+            i = 0;
+          } else { i++; }
+        }
+      }
+
+      let jokers = pool.filter(c => c.value === jVal);
+      for (let s of suits) {
+        if (jokers.length === 0) break;
+        let suitCards = pool.filter(c => c.suit === s && c.value !== jVal).sort((a,b) => cardRank[a.value] - cardRank[b.value]);
+        for (let i = 0; i < suitCards.length; i++) {
+          for (let j = i + 1; j < suitCards.length; j++) {
+            if (jokers.length === 0) break;
+            let r1 = cardRank[suitCards[i].value];
+            let r2 = cardRank[suitCards[j].value];
+            if (r2 === r1 + 2 || r2 === r1 + 1) {
+              let jk = jokers.pop();
+              let grp = (r2 === r1 + 2) ? [suitCards[i], jk, suitCards[j]] : [suitCards[i], suitCards[j], jk];
+              finalGroups.push({ title: '✔ Impure Seq', badge: 'status-impure', cards: grp });
+              let ids = new Set(grp.map(c => c.id));
+              pool = pool.filter(c => !ids.has(c.id));
+              suitCards = suitCards.filter(c => !ids.has(c.id));
+              break;
+            }
+          }
+        }
+      }
+
+      for (let s of suits) {
+        let sCards = pool.filter(c => c.suit === s).sort((a,b) => cardRank[a.value] - cardRank[b.value]);
+        if (sCards.length > 0) {
+          finalGroups.push({ title: `${s} Cards`, badge: 'status-suit', cards: sCards });
+        }
+      }
+
+      return finalGroups;
+    }
+
+    function applyViewMode() {
+      const container = document.getElementById('cardsDisplayArea');
+      container.innerHTML = '';
+
+      if (currentMode === 'auto') {
+        container.className = 'groups-wrapper';
+        currentCustomGroups.forEach(grp => {
+          const box = document.createElement('div');
+          box.className = 'card-group-box';
+          box.innerHTML = `<div class="badge-status ${grp.badge}">${grp.title}</div>`;
+
+          const row = document.createElement('div');
+          row.className = 'group-cards-row';
+          grp.cards.forEach(card => {
+            const cardEl = document.createElement('div');
+            renderCardElement(cardEl, card);
+            row.appendChild(cardEl);
+          });
+          box.appendChild(row);
+          container.appendChild(box);
+        });
+      } else {
+        container.className = 'single-hand-row';
+        const row = document.createElement('div');
+        row.className = 'group-cards-row';
+        rawCardsList.forEach(card => {
+          const cardEl = document.createElement('div');
+          renderCardElement(cardEl, card);
+          row.appendChild(cardEl);
+        });
+        container.appendChild(row);
+      }
+    }
+
+    function renderCardElement(el, card) {
+      const isJoker = currentWildJoker && card.value === currentWildJoker.value;
+      const isSelected = selectedIds.has(card.id);
+
+      el.className = `card ${card.color} ${isSelected ? 'selected' : ''} ${isJoker ? 'is-joker' : ''}`;
+      el.innerHTML = `
+        <div class="card-val-top">${card.value}<br>${card.suit}</div>
+        <div class="card-val-center">${card.suit}</div>
+        <div class="card-val-bottom">${card.value}<br>${card.suit}</div>
+        ${isJoker ? '<div class="joker-tag-mini">★ JOKER</div>' : ''}
+      `;
+      el.onclick = () => toggleSelect(card.id);
+    }
+
+    function openHistoryModal() {
+      playSound('click');
+      const list = document.getElementById('historyList');
+      list.innerHTML = '';
+      if (discardLogs.length === 0) {
+        list.innerHTML = '<p style="text-align:center; color:#aaa;">ఇంకా ఎవరూ కార్డులు విసరలేదు.</p>';
+      } else {
+        discardLogs.forEach(function(item) {
+          const row = document.createElement('div');
+          row.className = 'history-item';
+          const cardColor = (item.card.color === 'red') ? '#e74c3c' : '#ffffff';
+          row.innerHTML = '<span><strong>' + item.player + ':</strong></span> <span style="font-weight:bold; color:' + cardColor + ';">' + item.card.value + ' ' + item.card.suit + '</span>';
+          list.appendChild(row);
+        });
+      }
+      document.getElementById('historyModal').style.display = 'flex';
+    }
+
+    function closeHistoryModal() {
+      playSound('click');
+      document.getElementById('historyModal').style.display = 'none';
+    }
+  </script>
+</body>
+</html>
