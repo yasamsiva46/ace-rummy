@@ -323,7 +323,12 @@ app.post('/api/admin/update-coins', (req, res) => {
     saveUsers(users);
 
     res.json({ success: true, newBalance: users[phone].coins });
-});
+});// 15% కమిషన్ మరియు విన్నర్ అమౌంట్ లెక్కించే లాజిక్
+function calculateWinnings(totalPot) {
+    const commission = totalPot * 0.15; // 15% ప్లాట్‌ఫారమ్‌కు
+    const winnerAmount = totalPot - commission; // 85% విన్నర్‌కు
+    return { commission, winnerAmount };
+}
 // --- యూజర్ల లాగిన్ & అడ్మిన్ కాయిన్స్ కోడ్ ముగింపు ---
 const PORT = 3000;
 server.listen(PORT, '0.0.0.0', () => {
